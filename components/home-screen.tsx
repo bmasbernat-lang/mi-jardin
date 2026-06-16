@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
-import { Search, Droplets, Sun, Leaf, Plus, Trash2, Pencil, X, Check, Camera, LogOut, Info, CheckCircle2, AlertTriangle, XCircle, CalendarClock, Loader2 } from "lucide-react"
+import { Search, Droplets, Sun, Leaf, Plus, Trash2, Pencil, X, Check, Camera, LogOut, Info, CheckCircle2, AlertTriangle, XCircle, CalendarClock, Loader2, Images } from "lucide-react"
 import type { User } from "@supabase/supabase-js"
-import { getPlants, addPlant, updatePlant, deletePlant, waterPlant, uploadPlantPhoto, getTasks, scheduleNextWatering } from "@/lib/db"
+import { getPlants, addPlant, updatePlant, deletePlant, waterPlant, uploadPlantPhoto, getTasks, scheduleNextWatering, toggleTask, getPlantPhotos } from "@/lib/db"
 import type { Plant, Task } from "@/lib/supabase"
 import { speciesCatalog, findSpecies } from "@/lib/garden-data"
 
@@ -39,6 +39,9 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   const [photoFile, setPhotoFile]       = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [identifying, setIdentifying]   = useState(false)
+  const [galleryModal, setGalleryModal] = useState<Plant | null>(null)
+  const [galleryPhotos, setGalleryPhotos] = useState<{ url: string; created_at: string }[]>([])
+  const [loadingGallery, setLoadingGallery] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -151,6 +154,26 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
     } catch { setError("Error actualizando riego") }
   }
 
+  // Marca como regada una planta desde el aviso de riego (también completa la tarea pendiente).
+  async function handleWaterTask(task: Task) {
+    try {
+      await toggleTask(task.id, true)
+      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true } : t))
+      if (task.plant_id) await handleWater(task.plant_id)
+    } catch { setError("Error actualizando riego") }
+  }
+
+  async function openGallery(plant: Plant) {
+    setGalleryModal(plant)
+    setGalleryPhotos([])
+    setLoadingGallery(true)
+    try {
+      const photos = await getPlantPhotos(plant.id)
+      setGalleryPhotos(photos)
+    } catch { /* si falla, se muestra la galería vacía */ }
+    finally { setLoadingGallery(false) }
+  }
+
   async function openCare(plant: Plant) {
     setCareModal(plant)
     setAiCareInfo(null)
@@ -182,6 +205,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   const enfermas   = plants.filter(p => p.health === "Enferma").length
   const todayStr   = new Date().toISOString().split("T")[0]
   const tareasHoy  = tasks.filter(t => !t.completed && t.scheduled_date === todayStr).length
+  const pendingWatering = tasks.filter(t => t.type === "Riego" && !t.completed && t.scheduled_date <= todayStr)
   const careInfo   = careModal ? findSpecies(careModal.species) : undefined
 
   return (
@@ -215,6 +239,26 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
         <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
           {error} <button onClick={() => setError("")} className="ml-2 underline">Cerrar</button>
         </div>
+      )}
+
+      {!loading && pendingWatering.length > 0 && (
+        <section className="rounded-3xl border border-primary/30 bg-primary/5 p-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-primary">
+            <Droplets className="size-4" />
+            {pendingWatering.length === 1 ? "1 planta necesita agua" : `${pendingWatering.length} plantas necesitan agua`}
+          </div>
+          <div className="flex flex-col gap-2">
+            {pendingWatering.map(t => (
+              <div key={t.id} className="flex items-center justify-between rounded-2xl bg-card px-3.5 py-2.5">
+                <span className="text-sm font-medium">{t.plant_name}</span>
+                <button onClick={() => handleWaterTask(t)}
+                  className="flex items-center gap-1 rounded-xl bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground active:scale-95">
+                  <Droplets className="size-3" /> Regué
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {!loading && !query && plants.length > 0 && (
@@ -281,9 +325,13 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
             </div>
           ) : plants.map(plant => (
             <article key={plant.id} className="flex items-center gap-4 rounded-3xl border border-border bg-card p-3 shadow-sm">
-              <div className="relative size-20 shrink-0 overflow-hidden rounded-2xl bg-accent">
+              <button onClick={() => openGallery(plant)}
+                className="relative size-20 shrink-0 overflow-hidden rounded-2xl bg-accent active:scale-95">
                 <Image src={plant.image_url || "/placeholder.svg"} alt={plant.name} fill sizes="80px" className="object-cover" />
-              </div>
+                <span className="absolute bottom-1 right-1 flex size-5 items-center justify-center rounded-full bg-black/60">
+                  <Images className="size-3 text-white" />
+                </span>
+              </button>
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="truncate text-base font-semibold">{plant.name}</h3>
@@ -450,6 +498,41 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
                 Todavía no tenemos ficha de cuidados para esta especie.
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {galleryModal && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40 sm:items-center sm:px-4" onClick={() => setGalleryModal(null)}>
+          <div className="flex max-h-[85vh] w-full flex-col rounded-t-3xl bg-background shadow-xl sm:rounded-3xl" onClick={e => e.stopPropagation()}>
+            <div className="overflow-y-auto p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Galería · {galleryModal.name}</h2>
+                <button onClick={() => setGalleryModal(null)} className="rounded-full p-1.5 hover:bg-muted"><X className="size-5" /></button>
+              </div>
+              {loadingGallery ? (
+                <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" /> Cargando fotos...
+                </div>
+              ) : galleryPhotos.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {galleryPhotos.map((p, i) => (
+                    <div key={i} className="overflow-hidden rounded-2xl bg-muted">
+                      <img src={p.url} alt={`Foto ${i + 1}`} className="aspect-square w-full object-cover" />
+                      {p.created_at && (
+                        <p className="bg-card px-2 py-1 text-center text-[11px] text-muted-foreground">
+                          {new Date(p.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  Aún no hay fotos guardadas en la galería. Cada foto que añadas al editar esta planta se guardará aquí con su fecha.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}

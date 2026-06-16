@@ -136,11 +136,28 @@ export async function deleteDiagnosis(id: string): Promise<void> {
 export async function uploadPlantPhoto(file: File, plantId: string): Promise<string> {
   const uid = await getUserId()
   const ext  = file.name.split(".").pop()
-  const path = `${uid}/${plantId}.${ext}`
+  // Cada foto se guarda con su propia fecha para poder formar una galería con el historial.
+  const path = `${uid}/${plantId}/${Date.now()}.${ext}`
 
   const { error } = await supabase.storage.from("plants").upload(path, file, { upsert: true })
   if (error) throw error
 
   const { data } = supabase.storage.from("plants").getPublicUrl(path)
   return data.publicUrl
+}
+
+// Lista todas las fotos guardadas de una planta (más reciente primero).
+export async function getPlantPhotos(plantId: string): Promise<{ url: string; created_at: string }[]> {
+  const uid = await getUserId()
+  const prefix = `${uid}/${plantId}`
+  const { data, error } = await supabase.storage.from("plants").list(prefix, {
+    sortBy: { column: "created_at", order: "desc" },
+  })
+  if (error) throw error
+  return (data ?? [])
+    .filter(f => f.name && !f.name.startsWith("."))
+    .map(f => {
+      const { data: pub } = supabase.storage.from("plants").getPublicUrl(`${prefix}/${f.name}`)
+      return { url: pub.publicUrl, created_at: f.created_at ?? "" }
+    })
 }
