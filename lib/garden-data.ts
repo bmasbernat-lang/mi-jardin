@@ -73,6 +73,28 @@ export const speciesCatalog: Species[] = [
   { id: "8", name: "Cactus", scientific: "Mammillaria", difficulty: "Fácil", water: "Mensual" },
 ]
 
+export function findSpecies(speciesName: string | undefined | null): Species | undefined {
+  if (!speciesName) return undefined
+  const q = speciesName.trim().toLowerCase()
+  if (!q) return undefined
+  return speciesCatalog.find(s =>
+    s.scientific.toLowerCase() === q || s.name.toLowerCase() === q ||
+    s.scientific.toLowerCase().includes(q) || q.includes(s.scientific.toLowerCase()) ||
+    s.name.toLowerCase().includes(q) || q.includes(s.name.toLowerCase())
+  )
+}
+
+export function waterFrequencyDays(water: string | undefined | null): number {
+  const w = (water ?? "").toLowerCase()
+  if (w.includes("diario")) return 1
+  if (w.includes("cada 2")) return 2
+  if (w.includes("cada 3")) return 3
+  if (w.includes("semanal")) return 7
+  if (w.includes("quincenal")) return 14
+  if (w.includes("mensual")) return 30
+  return 7
+}
+
 export const dailyTasks: Task[] = [
   { id: "t1", plant: "Albahaca", type: "Riego", time: "08:00" },
   { id: "t2", plant: "Monstera", type: "Revisión", time: "09:30" },

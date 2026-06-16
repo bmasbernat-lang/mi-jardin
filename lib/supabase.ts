@@ -29,3 +29,16 @@ export type Task = {
   completed: boolean
   created_at: string
 }
+
+export type Diagnosis = {
+  id: string
+  user_id: string
+  plant_id: string | null
+  plant_name: string | null
+  image_url: string
+  estado: "Saludable" | "Atención" | "Enferma"
+  diagnostico: string
+  descripcion: string
+  tratamiento: string
+  created_at: string
+}

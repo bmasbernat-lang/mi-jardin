@@ -1,9 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { CheckCircle, AlertTriangle, XCircle, Leaf, LinkIcon } from "lucide-react"
-import { getPlants, updatePlant } from "@/lib/db"
-import type { Plant } from "@/lib/supabase"
+import { CheckCircle, AlertTriangle, XCircle, Leaf, LinkIcon, History, Trash2 } from "lucide-react"
+import { getPlants, updatePlant, addDiagnosis, updateDiagnosis, getDiagnoses, deleteDiagnosis } from "@/lib/db"
+import type { Plant, Diagnosis } from "@/lib/supabase"
 
 type DiagResult = {
   estado: "Saludable" | "Atención" | "Enferma"
@@ -18,50 +18,143 @@ const estadoConfig = {
   Enferma:   { icon: XCircle,       color: "text-red-600",    bg: "bg-red-50",     border: "border-red-200" },
 }
 
+function formatRelative(iso: string) {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+  if (diff <= 0) return "Hoy"
+  if (diff === 1) return "Ayer"
+  return `Hace ${diff} días`
+}
+
 export function DiagnosisScreen({ data }: { data: { image: string; result: string } | null }) {
-  const [plants, setPlants]       = useState<Plant[]>([])
+  const [plants, setPlants]         = useState<Plant[]>([])
   const [selectedId, setSelectedId] = useState("")
-  const [linking, setLinking]     = useState(false)
-  const [linked, setLinked]       = useState(false)
+  const [linking, setLinking]       = useState(false)
+  const [linked, setLinked]         = useState(false)
+  const [savedId, setSavedId]       = useState<string | null>(null)
+  const [history, setHistory]       = useState<Diagnosis[]>([])
+  const [historyLoading, setHistoryLoading] = useState(true)
 
   useEffect(() => {
     getPlants().then(setPlants).catch(() => {})
     setLinked(false)
     setSelectedId("")
+    setSavedId(null)
+
+    let result: DiagResult | null = null
+    if (data) {
+      try { result = JSON.parse(data.result) } catch {}
+    }
+
+    async function persistAndRefresh() {
+      try {
+        if (data && result) {
+          const saved = await addDiagnosis({
+            plant_id: null,
+            plant_name: null,
+            image_url: data.image,
+            estado: result.estado,
+            diagnostico: result.diagnostico,
+            descripcion: result.descripcion,
+            tratamiento: result.tratamiento,
+          })
+          setSavedId(saved.id)
+        }
+      } catch { /* silent */ }
+      try { setHistory(await getDiagnoses()) }
+      catch { /* silent */ }
+      finally { setHistoryLoading(false) }
+    }
+    persistAndRefresh()
   }, [data])
-  if (!data) return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-5">
-      <div className="flex size-16 items-center justify-center rounded-3xl bg-primary/10">
-        <Leaf className="size-8 text-primary" />
-      </div>
-      <div className="text-center">
-        <p className="font-medium text-foreground">Sin diagnóstico</p>
-        <p className="mt-1 text-sm text-muted-foreground">Ve al escáner y sube una foto de tu planta</p>
-      </div>
-    </div>
-  )
 
   let result: DiagResult | null = null
-  try { result = JSON.parse(data.result) } catch {}
-
-  if (!result) return (
-    <div className="px-5 pt-8">
-      <p className="text-sm text-red-600">Error procesando el diagnóstico.</p>
-    </div>
-  )
-
-  const cfg = estadoConfig[result.estado] ?? estadoConfig["Atención"]
-  const Icon = cfg.icon
+  if (data) { try { result = JSON.parse(data.result) } catch {} }
 
   async function handleLink() {
-    if (!selectedId) return
+    if (!selectedId || !result) return
     setLinking(true)
     try {
-      await updatePlant(selectedId, { health: result!.estado })
+      await updatePlant(selectedId, { health: result.estado })
+      const plant = plants.find(p => p.id === selectedId)
+      if (savedId) {
+        const updated = await updateDiagnosis(savedId, { plant_id: selectedId, plant_name: plant?.name ?? null })
+        setHistory(prev => prev.map(h => h.id === updated.id ? updated : h))
+      }
       setLinked(true)
     } catch {}
     finally { setLinking(false) }
   }
+
+  async function handleDeleteHistory(id: string) {
+    try {
+      await deleteDiagnosis(id)
+      setHistory(prev => prev.filter(h => h.id !== id))
+    } catch {}
+  }
+
+  const historySection = (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <History className="size-4 text-primary" />
+        <p className="text-sm font-semibold text-foreground">Historial de diagnósticos</p>
+      </div>
+      {historyLoading ? (
+        Array.from({ length: 2 }).map((_, i) => <div key={i} className="h-20 animate-pulse rounded-2xl bg-muted" />)
+      ) : history.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+          Aún no hay diagnósticos guardados.
+        </p>
+      ) : (
+        history.map(h => {
+          const cfg = estadoConfig[h.estado] ?? estadoConfig["Atención"]
+          const Icon = cfg.icon
+          return (
+            <div key={h.id} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
+              <img src={h.image_url} alt="" className="size-14 shrink-0 rounded-xl object-cover" />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex items-center gap-1.5">
+                  <Icon className={`size-3.5 ${cfg.color}`} />
+                  <span className={`text-xs font-semibold uppercase tracking-wide ${cfg.color}`}>{h.estado}</span>
+                </div>
+                <p className="truncate text-sm font-medium">{h.diagnostico}</p>
+                <p className="text-xs text-muted-foreground">
+                  {h.plant_name ? h.plant_name : "Sin vincular"} · {formatRelative(h.created_at)}
+                </p>
+              </div>
+              <button onClick={() => handleDeleteHistory(h.id)}
+                className="shrink-0 rounded-xl p-1.5 text-muted-foreground hover:bg-muted active:scale-95">
+                <Trash2 className="size-4" />
+              </button>
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+
+  if (!data || !result) {
+    return (
+      <div className="flex flex-col gap-6 px-5 pb-24 pt-8">
+        {!data ? (
+          <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
+            <div className="flex size-16 items-center justify-center rounded-3xl bg-primary/10">
+              <Leaf className="size-8 text-primary" />
+            </div>
+            <div>
+              <p className="font-medium text-foreground">Sin diagnóstico nuevo</p>
+              <p className="mt-1 text-sm text-muted-foreground">Ve al escáner y sube una foto de tu planta</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-red-600">Error procesando el diagnóstico.</p>
+        )}
+        {historySection}
+      </div>
+    )
+  }
+
+  const cfg = estadoConfig[result.estado] ?? estadoConfig["Atención"]
+  const Icon = cfg.icon
 
   return (
     <div className="flex flex-col gap-5 px-5 pb-24 pt-8">
@@ -118,6 +211,8 @@ export function DiagnosisScreen({ data }: { data: { image: string; result: strin
           )}
         </div>
       )}
+
+      {historySection}
     </div>
   )
 }

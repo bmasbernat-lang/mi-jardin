@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Calendar, CheckCircle2, Circle, Trash2, Plus, X } from "lucide-react"
-import { getTasks, addTask, toggleTask, deleteTask, getPlants } from "@/lib/db"
+import { getTasks, addTask, toggleTask, deleteTask, getPlants, scheduleNextWatering } from "@/lib/db"
 import type { Task, Plant } from "@/lib/supabase"
 
 const taskColors: Record<string, string> = {
@@ -37,6 +37,14 @@ export function CalendarScreen() {
     try {
       await toggleTask(id, !completed)
       setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !completed } : t))
+      const task = tasks.find(t => t.id === id)
+      if (!completed && task?.type === "Riego" && task.plant_id) {
+        const plant = plants.find(p => p.id === task.plant_id)
+        if (plant) {
+          const nextTask = await scheduleNextWatering(plant)
+          if (nextTask) setTasks(prev => [...prev, nextTask])
+        }
+      }
     } catch { /* silent */ }
   }
 

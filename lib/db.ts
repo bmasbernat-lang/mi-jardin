@@ -1,4 +1,5 @@
-import { supabase, Plant, Task } from "./supabase"
+import { supabase, Plant, Task, Diagnosis } from "./supabase"
+import { findSpecies, waterFrequencyDays } from "./garden-data"
 
 async function getUserId() {
   const { data: { user } } = await supabase.auth.getUser()
@@ -69,6 +70,64 @@ export async function toggleTask(id: string, completed: boolean): Promise<void> 
 
 export async function deleteTask(id: string): Promise<void> {
   const { error } = await supabase.from("tasks").delete().eq("id", id)
+  if (error) throw error
+}
+
+// Crea automáticamente la siguiente tarea de riego según la especie de la planta.
+// Devuelve null si ya existe una tarea de riego programada ese mismo día para esa planta.
+export async function scheduleNextWatering(plant: Plant): Promise<Task | null> {
+  const species = findSpecies(plant.species)
+  const days = waterFrequencyDays(species?.water)
+  const next = new Date()
+  next.setDate(next.getDate() + days)
+  const scheduled_date = next.toISOString().split("T")[0]
+
+  const uid = await getUserId()
+  const { data: existing, error: checkError } = await supabase
+    .from("tasks").select("id").eq("user_id", uid).eq("plant_id", plant.id)
+    .eq("type", "Riego").eq("scheduled_date", scheduled_date).limit(1)
+  if (checkError) throw checkError
+  if (existing && existing.length > 0) return null
+
+  return addTask({
+    plant_id: plant.id,
+    plant_name: plant.name,
+    type: "Riego",
+    scheduled_date,
+    time: "09:00",
+    completed: false,
+  })
+}
+
+// ─── DIAGNOSES (historial del escáner) ──────────────────────
+
+export async function getDiagnoses(plantId?: string): Promise<Diagnosis[]> {
+  const uid = await getUserId()
+  let q = supabase.from("diagnoses").select("*").eq("user_id", uid)
+    .order("created_at", { ascending: false })
+  if (plantId) q = q.eq("plant_id", plantId)
+  const { data, error } = await q
+  if (error) throw error
+  return data ?? []
+}
+
+export async function addDiagnosis(d: Omit<Diagnosis, "id" | "created_at" | "user_id">): Promise<Diagnosis> {
+  const uid = await getUserId()
+  const { data, error } = await supabase
+    .from("diagnoses").insert({ ...d, user_id: uid }).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function updateDiagnosis(id: string, updates: Partial<Diagnosis>): Promise<Diagnosis> {
+  const { data, error } = await supabase
+    .from("diagnoses").update(updates).eq("id", id).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteDiagnosis(id: string): Promise<void> {
+  const { error } = await supabase.from("diagnoses").delete().eq("id", id)
   if (error) throw error
 }
 

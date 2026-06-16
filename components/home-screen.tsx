@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
-import { Search, Droplets, Sun, Leaf, Plus, Trash2, Pencil, X, Check, Camera, LogOut } from "lucide-react"
+import { Search, Droplets, Sun, Leaf, Plus, Trash2, Pencil, X, Check, Camera, LogOut, Info, CheckCircle2, AlertTriangle, XCircle, CalendarClock } from "lucide-react"
 import type { User } from "@supabase/supabase-js"
-import { getPlants, addPlant, updatePlant, deletePlant, waterPlant, uploadPlantPhoto } from "@/lib/db"
-import type { Plant } from "@/lib/supabase"
-import { speciesCatalog } from "@/lib/garden-data"
+import { getPlants, addPlant, updatePlant, deletePlant, waterPlant, uploadPlantPhoto, getTasks, scheduleNextWatering } from "@/lib/db"
+import type { Plant, Task } from "@/lib/supabase"
+import { speciesCatalog, findSpecies } from "@/lib/garden-data"
 
 const healthStyles: Record<string, string> = {
   Saludable: "bg-emerald-100 text-emerald-700",
@@ -23,6 +23,7 @@ const emptyForm = {
 
 export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: () => void }) {
   const [plants, setPlants]   = useState<Plant[]>([])
+  const [tasks, setTasks]     = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery]     = useState("")
   const [modal, setModal]     = useState<"add" | "edit" | null>(null)
@@ -30,6 +31,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   const [form, setForm]       = useState(emptyForm)
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState("")
+  const [careModal, setCareModal] = useState<Plant | null>(null)
   const photoInputRef         = useRef<HTMLInputElement>(null)
   const [photoFile, setPhotoFile]       = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
@@ -37,7 +39,10 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   useEffect(() => { load() }, [])
 
   async function load() {
-    try { setPlants(await getPlants()) }
+    try {
+      const [p, t] = await Promise.all([getPlants(), getTasks()])
+      setPlants(p); setTasks(t)
+    }
     catch { setError("Error cargando plantas") }
     finally { setLoading(false) }
   }
@@ -99,6 +104,11 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
       await waterPlant(id)
       setPlants(prev => prev.map(p =>
         p.id === id ? { ...p, last_watered: new Date().toISOString() } : p))
+      const plant = plants.find(p => p.id === id)
+      if (plant) {
+        const nextTask = await scheduleNextWatering({ ...plant, last_watered: new Date().toISOString() })
+        if (nextTask) setTasks(prev => [...prev, nextTask])
+      }
     } catch { setError("Error actualizando riego") }
   }
 
@@ -111,6 +121,13 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   const filtered = query ? speciesCatalog.filter(s =>
     s.name.toLowerCase().includes(query.toLowerCase()) ||
     s.scientific.toLowerCase().includes(query.toLowerCase())) : []
+
+  const sanas      = plants.filter(p => p.health === "Saludable").length
+  const atencion   = plants.filter(p => p.health === "Atención").length
+  const enfermas   = plants.filter(p => p.health === "Enferma").length
+  const todayStr   = new Date().toISOString().split("T")[0]
+  const tareasHoy  = tasks.filter(t => !t.completed && t.scheduled_date === todayStr).length
+  const careInfo   = careModal ? findSpecies(careModal.species) : undefined
 
   return (
     <div className="flex flex-col gap-6 px-5 pb-24 pt-8">
@@ -143,6 +160,31 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
         <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
           {error} <button onClick={() => setError("")} className="ml-2 underline">Cerrar</button>
         </div>
+      )}
+
+      {!loading && !query && plants.length > 0 && (
+        <section className="grid grid-cols-4 gap-2">
+          <div className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-card py-3">
+            <CheckCircle2 className="size-4 text-emerald-600" />
+            <span className="text-sm font-semibold">{sanas}</span>
+            <span className="text-[10px] text-muted-foreground">Sanas</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-card py-3">
+            <AlertTriangle className="size-4 text-amber-600" />
+            <span className="text-sm font-semibold">{atencion}</span>
+            <span className="text-[10px] text-muted-foreground">Atención</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-card py-3">
+            <XCircle className="size-4 text-red-600" />
+            <span className="text-sm font-semibold">{enfermas}</span>
+            <span className="text-[10px] text-muted-foreground">Enfermas</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-card py-3">
+            <CalendarClock className="size-4 text-primary" />
+            <span className="text-sm font-semibold">{tareasHoy}</span>
+            <span className="text-[10px] text-muted-foreground">Hoy</span>
+          </div>
+        </section>
       )}
 
       {query ? (
@@ -180,7 +222,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
             <div className="rounded-3xl border border-dashed border-border p-8 text-center">
               <Leaf className="mx-auto mb-3 size-8 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">No tienes plantas aún.</p>
-              <button onClick={openAdd} className="mt-3 text-sm font-medium text-primary underline">Añadir la primera</button>
+              <button onClick={() => openAdd()} className="mt-3 text-sm font-medium text-primary underline">Añadir la primera</button>
             </div>
           ) : plants.map(plant => (
             <article key={plant.id} className="flex items-center gap-4 rounded-3xl border border-border bg-card p-3 shadow-sm">
@@ -205,6 +247,10 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
                   <button onClick={() => openEdit(plant)}
                     className="flex items-center gap-1 rounded-xl bg-muted px-2.5 py-1 text-xs font-medium active:scale-95">
                     <Pencil className="size-3" /> Editar
+                  </button>
+                  <button onClick={() => setCareModal(plant)}
+                    className="flex items-center gap-1 rounded-xl bg-muted px-2.5 py-1 text-xs font-medium active:scale-95">
+                    <Info className="size-3" />
                   </button>
                   <button onClick={() => handleDelete(plant.id)}
                     className="flex items-center gap-1 rounded-xl bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 active:scale-95">
@@ -282,6 +328,38 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow transition active:scale-95 disabled:opacity-50">
               {saving ? "Guardando..." : <><Check className="size-4" /> Guardar</>}
             </button>
+          </div>
+        </div>
+      )}
+
+      {careModal && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40 sm:items-center sm:px-4" onClick={() => setCareModal(null)}>
+          <div className="w-full rounded-t-3xl bg-background p-6 shadow-xl sm:rounded-3xl" onClick={e => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Ficha de cuidados</h2>
+              <button onClick={() => setCareModal(null)} className="rounded-full p-1.5 hover:bg-muted"><X className="size-5" /></button>
+            </div>
+            <p className="mb-4 text-sm font-medium text-foreground">{careModal.name}{careModal.species ? ` · ${careModal.species}` : ""}</p>
+            {careInfo ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between rounded-2xl bg-accent px-4 py-3">
+                  <span className="text-sm text-muted-foreground">Dificultad</span>
+                  <span className="text-sm font-semibold">{careInfo.difficulty}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl bg-accent px-4 py-3">
+                  <span className="text-sm text-muted-foreground">Riego recomendado</span>
+                  <span className="text-sm font-semibold">{careInfo.water}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl bg-accent px-4 py-3">
+                  <span className="text-sm text-muted-foreground">Luz actual</span>
+                  <span className="text-sm font-semibold">{careModal.light}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                Todavía no tenemos ficha de cuidados para esta especie.
+              </p>
+            )}
           </div>
         </div>
       )}
