@@ -23,7 +23,10 @@ Para la planta "${planta}", responde SOLO con un JSON con este formato exacto, s
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" })
+    const model = genAI.getGenerativeModel({
+      model: "gemini-flash-latest",
+      generationConfig: { responseMimeType: "application/json" },
+    })
 
     const result = await model.generateContent(prompt)
     const text = result.response.text().replace(/```json|```/g, "").trim()
@@ -31,6 +34,11 @@ Para la planta "${planta}", responde SOLO con un JSON con este formato exacto, s
     try {
       return NextResponse.json(JSON.parse(text))
     } catch {
+      // A veces la IA añade texto antes/después del JSON: intentamos extraer solo el bloque {...}
+      const match = text.match(/\{[\s\S]*\}/)
+      if (match) {
+        try { return NextResponse.json(JSON.parse(match[0])) } catch { /* sigue al error de abajo */ }
+      }
       console.error("[care-info] Respuesta de IA no es JSON válido:", text)
       return NextResponse.json({ error: "Error parseando respuesta" }, { status: 500 })
     }

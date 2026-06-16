@@ -25,7 +25,10 @@ Analiza esta imagen y responde SOLO con un JSON con este formato exacto:
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" })
+    const model = genAI.getGenerativeModel({
+      model: "gemini-flash-latest",
+      generationConfig: { responseMimeType: "application/json" },
+    })
 
     const result = await model.generateContent([
       prompt,
@@ -37,6 +40,10 @@ Analiza esta imagen y responde SOLO con un JSON con este formato exacto:
     try {
       return NextResponse.json(JSON.parse(text))
     } catch {
+      const match = text.match(/\{[\s\S]*\}/)
+      if (match) {
+        try { return NextResponse.json(JSON.parse(match[0])) } catch { /* sigue al error de abajo */ }
+      }
       console.error("[diagnose] Respuesta de IA no es JSON válido:", text)
       return NextResponse.json({ error: "Error parseando respuesta" }, { status: 500 })
     }
