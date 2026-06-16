@@ -124,7 +124,9 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
         setPlants(prev => prev.map(x => x.id === editing.id ? p : x))
       }
       setModal(null)
-    } catch { setError("Error guardando planta") }
+    } catch (e: any) {
+      setError(`Error guardando planta: ${e?.message || e?.error_description || JSON.stringify(e)}`)
+    }
     finally { setSaving(false) }
   }
 
