@@ -32,6 +32,8 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState("")
   const [careModal, setCareModal] = useState<Plant | null>(null)
+  const [aiCareInfo, setAiCareInfo] = useState<{ dificultad: string; riego: string; luz: string; consejo: string } | null>(null)
+  const [loadingCare, setLoadingCare] = useState(false)
   const photoInputRef         = useRef<HTMLInputElement>(null)
   const nameInputRef          = useRef<HTMLInputElement>(null)
   const [photoFile, setPhotoFile]       = useState<File | null>(null)
@@ -147,6 +149,22 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
         if (nextTask) setTasks(prev => [...prev, nextTask])
       }
     } catch { setError("Error actualizando riego") }
+  }
+
+  async function openCare(plant: Plant) {
+    setCareModal(plant)
+    setAiCareInfo(null)
+    if (findSpecies(plant.species)) return
+    setLoadingCare(true)
+    try {
+      const res = await fetch("/api/care-info", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: plant.name, species: plant.species }),
+      })
+      const data = await res.json()
+      if (data?.dificultad || data?.riego || data?.luz) setAiCareInfo(data)
+    } catch { /* si falla, se muestra el mensaje de "sin ficha" */ }
+    finally { setLoadingCare(false) }
   }
 
   function formatWatered(iso: string) {
@@ -285,7 +303,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
                     className="flex items-center gap-1 rounded-xl bg-muted px-2.5 py-1 text-xs font-medium active:scale-95">
                     <Pencil className="size-3" /> Editar
                   </button>
-                  <button onClick={() => setCareModal(plant)}
+                  <button onClick={() => openCare(plant)}
                     className="flex items-center gap-1 rounded-xl bg-muted px-2.5 py-1 text-xs font-medium active:scale-95">
                     <Info className="size-3" />
                   </button>
@@ -403,6 +421,29 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
                   <span className="text-sm text-muted-foreground">Luz actual</span>
                   <span className="text-sm font-semibold">{careModal.light}</span>
                 </div>
+              </div>
+            ) : loadingCare ? (
+              <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> Buscando información con IA...
+              </div>
+            ) : aiCareInfo ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between rounded-2xl bg-accent px-4 py-3">
+                  <span className="text-sm text-muted-foreground">Dificultad</span>
+                  <span className="text-sm font-semibold">{aiCareInfo.dificultad}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl bg-accent px-4 py-3">
+                  <span className="text-sm text-muted-foreground">Riego recomendado</span>
+                  <span className="text-sm font-semibold">{aiCareInfo.riego}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl bg-accent px-4 py-3">
+                  <span className="text-sm text-muted-foreground">Luz recomendada</span>
+                  <span className="text-sm font-semibold">{aiCareInfo.luz}</span>
+                </div>
+                {aiCareInfo.consejo && (
+                  <p className="rounded-2xl bg-accent px-4 py-3 text-sm text-foreground">{aiCareInfo.consejo}</p>
+                )}
+                <p className="text-center text-[11px] text-muted-foreground">Generado con IA</p>
               </div>
             ) : (
               <p className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
