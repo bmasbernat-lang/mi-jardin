@@ -5,13 +5,14 @@ import { HomeScreen }      from "@/components/home-screen"
 import { ScannerScreen }   from "@/components/scanner-screen"
 import { DiagnosisScreen } from "@/components/diagnosis-screen"
 import { CalendarScreen }  from "@/components/calendar-screen"
+import { StatsScreen }     from "@/components/stats-screen"
 import { BottomNav }       from "@/components/bottom-nav"
 import { AuthScreen }      from "@/components/auth-screen"
 import { supabase }        from "@/lib/supabase"
 import { signOut }         from "@/lib/auth"
 import type { User }       from "@supabase/supabase-js"
 
-export type Tab = "home" | "scanner" | "diagnosis" | "calendar"
+export type Tab = "home" | "scanner" | "diagnosis" | "calendar" | "stats"
 
 export function GardenApp() {
   const [user, setUser]     = useState<User | null | undefined>(undefined)
@@ -46,6 +47,7 @@ export function GardenApp() {
         {tab === "scanner"   && <ScannerScreen onResult={handleScanResult} />}
         {tab === "diagnosis" && <DiagnosisScreen data={diagData} />}
         {tab === "calendar"  && <CalendarScreen />}
+        {tab === "stats"     && <StatsScreen />}
       </main>
       <BottomNav active={tab} onChange={setTab} />
     </div>

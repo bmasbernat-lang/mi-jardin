@@ -1,6 +1,6 @@
 "use client"
 
-import { Home, ScanLine, Stethoscope, Calendar } from "lucide-react"
+import { Home, ScanLine, Stethoscope, Calendar, BarChart3 } from "lucide-react"
 import type { Tab } from "@/components/garden-app"
 
 const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
@@ -8,6 +8,7 @@ const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
   { id: "scanner", label: "Escáner", icon: ScanLine },
   { id: "diagnosis", label: "Diagnóstico", icon: Stethoscope },
   { id: "calendar", label: "Calendario", icon: Calendar },
+  { id: "stats", label: "Datos", icon: BarChart3 },
 ]
 
 export function BottomNav({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {

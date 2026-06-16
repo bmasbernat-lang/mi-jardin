@@ -1,0 +1,14 @@
+{
+  "name": "Mi Jardín",
+  "short_name": "Mi Jardín",
+  "description": "Cuida tus plantas: lista de plantas, escáner de salud, diagnóstico con IA, calendario y avisos de riego.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3f8f5b",
+  "icons": [
+    { "src": "/apple-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

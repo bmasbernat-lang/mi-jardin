@@ -19,6 +19,12 @@ export const metadata: Metadata = {
   description:
     'Cuida tus plantas: lista de mis plantas, escáner de salud, diagnóstico de enfermedades y calendario de riego y abono.',
   generator: 'v0.app',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Mi Jardín',
+  },
   icons: {
     icon: [
       {
@@ -38,6 +44,17 @@ export const metadata: Metadata = {
   },
 }
 
+// Aplica el tema guardado antes de pintar la página, para evitar parpadeos de claro/oscuro.
+const themeScript = `
+(function () {
+  try {
+    var stored = localStorage.getItem('theme');
+    var dark = stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (dark) document.documentElement.classList.add('dark');
+  } catch (e) {}
+})();
+`
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -45,6 +62,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className={`${geistSans.variable} ${geistMono.variable} bg-background`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="font-sans antialiased">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}

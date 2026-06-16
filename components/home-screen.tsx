@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
-import { Search, Droplets, Sun, Leaf, Plus, Trash2, Pencil, X, Check, Camera, LogOut, Info, CheckCircle2, AlertTriangle, XCircle, CalendarClock, Loader2, Images } from "lucide-react"
+import { Search, Droplets, Sun, Moon, Leaf, Plus, Trash2, Pencil, X, Check, Camera, LogOut, Info, CheckCircle2, AlertTriangle, XCircle, CalendarClock, Loader2, Images, Bell, BellRing } from "lucide-react"
 import type { User } from "@supabase/supabase-js"
 import { getPlants, addPlant, updatePlant, deletePlant, waterPlant, uploadPlantPhoto, getTasks, scheduleNextWatering, toggleTask, getPlantPhotos } from "@/lib/db"
 import type { Plant, Task } from "@/lib/supabase"
 import { speciesCatalog, findSpecies } from "@/lib/garden-data"
+import { subscribeToPush, getExistingSubscription, pushSupported } from "@/lib/push"
 
 const healthStyles: Record<string, string> = {
   Saludable: "bg-emerald-100 text-emerald-700",
@@ -42,8 +43,35 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   const [galleryModal, setGalleryModal] = useState<Plant | null>(null)
   const [galleryPhotos, setGalleryPhotos] = useState<{ url: string; created_at: string }[]>([])
   const [loadingGallery, setLoadingGallery] = useState(false)
+  const [dark, setDark] = useState(false)
+  const [pushState, setPushState] = useState<"idle" | "loading" | "active" | "unsupported">("idle")
 
   useEffect(() => { load() }, [])
+  useEffect(() => { setDark(document.documentElement.classList.contains("dark")) }, [])
+  useEffect(() => {
+    if (!pushSupported()) { setPushState("unsupported"); return }
+    getExistingSubscription().then(sub => { if (sub) setPushState("active") }).catch(() => {})
+  }, [])
+
+  function toggleDark() {
+    const next = !dark
+    document.documentElement.classList.toggle("dark", next)
+    localStorage.setItem("theme", next ? "dark" : "light")
+    setDark(next)
+  }
+
+  async function handleEnablePush() {
+    if (pushState === "active") return
+    setPushState("loading")
+    setError("")
+    try {
+      await subscribeToPush()
+      setPushState("active")
+    } catch (e: any) {
+      setPushState("idle")
+      setError(e?.message || "No se pudieron activar las notificaciones")
+    }
+  }
 
   async function load() {
     try {
@@ -218,6 +246,21 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
           <h1 className="text-2xl font-semibold">Mi jardín</h1>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={toggleDark}
+            className="flex items-center justify-center rounded-2xl border border-border bg-card p-2.5 text-muted-foreground transition active:scale-95">
+            {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          </button>
+          {pushState !== "unsupported" && (
+            <button onClick={handleEnablePush} disabled={pushState === "loading" || pushState === "active"}
+              title={pushState === "active" ? "Avisos activados" : "Activar avisos de riego"}
+              className={`flex items-center justify-center rounded-2xl border border-border p-2.5 transition active:scale-95 ${pushState === "active" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}>
+              {pushState === "loading"
+                ? <Loader2 className="size-4 animate-spin" />
+                : pushState === "active"
+                  ? <BellRing className="size-4" />
+                  : <Bell className="size-4" />}
+            </button>
+          )}
           <button onClick={onSignOut}
             className="flex items-center justify-center rounded-2xl border border-border bg-card p-2.5 text-muted-foreground transition hover:text-destructive active:scale-95">
             <LogOut className="size-4" />
