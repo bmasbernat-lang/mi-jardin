@@ -302,7 +302,8 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
 
       {modal && (
         <div className="fixed inset-0 z-50 flex items-end bg-black/40 sm:items-center sm:px-4">
-          <div className="w-full rounded-t-3xl bg-background p-6 shadow-xl sm:rounded-3xl">
+          <div className="flex max-h-[85vh] w-full flex-col rounded-t-3xl bg-background shadow-xl sm:rounded-3xl">
+          <div className="overflow-y-auto p-6">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-semibold">{modal === "add" ? "Nueva planta" : "Editar planta"}</h2>
               <button onClick={() => setModal(null)} className="rounded-full p-1.5 hover:bg-muted"><X className="size-5" /></button>
@@ -369,10 +370,13 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
                   className="w-full resize-none rounded-2xl border border-border bg-card px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
               </div>
             </div>
+          </div>
+          <div className="border-t border-border p-4">
             <button onClick={handleSave} disabled={saving}
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow transition active:scale-95 disabled:opacity-50">
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow transition active:scale-95 disabled:opacity-50">
               {saving ? "Guardando..." : <><Check className="size-4" /> Guardar</>}
             </button>
+          </div>
           </div>
         </div>
       )}
