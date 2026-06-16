@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
-import { Search, Droplets, Sun, Leaf, Plus, Trash2, Pencil, X, Check, Camera, LogOut, Info, CheckCircle2, AlertTriangle, XCircle, CalendarClock } from "lucide-react"
+import { Search, Droplets, Sun, Leaf, Plus, Trash2, Pencil, X, Check, Camera, LogOut, Info, CheckCircle2, AlertTriangle, XCircle, CalendarClock, Loader2 } from "lucide-react"
 import type { User } from "@supabase/supabase-js"
 import { getPlants, addPlant, updatePlant, deletePlant, waterPlant, uploadPlantPhoto, getTasks, scheduleNextWatering } from "@/lib/db"
 import type { Plant, Task } from "@/lib/supabase"
@@ -36,6 +36,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   const nameInputRef          = useRef<HTMLInputElement>(null)
   const [photoFile, setPhotoFile]       = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [identifying, setIdentifying]   = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -68,8 +69,34 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   function handlePhotoFile(file: File) {
     setPhotoFile(file)
     const reader = new FileReader()
-    reader.onload = (e) => setPhotoPreview(e.target?.result as string)
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string
+      setPhotoPreview(dataUrl)
+      identifyPlant(dataUrl)
+    }
     reader.readAsDataURL(file)
+  }
+
+  // Identifica la especie con IA a partir de la foto y rellena nombre/especie si están vacíos.
+  async function identifyPlant(image: string) {
+    setIdentifying(true)
+    try {
+      const res = await fetch("/api/identify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image }),
+      })
+      const data = await res.json()
+      const nombre  = data?.nombre_comun || null
+      const especie = data?.especie_cientifica || null
+      if (nombre || especie) {
+        setForm(f => ({
+          ...f,
+          name: f.name.trim() ? f.name : (nombre ?? f.name),
+          species: f.species.trim() ? f.species : (especie ?? nombre ?? f.species),
+        }))
+      }
+    } catch { /* identificación best-effort: si falla, el usuario rellena a mano */ }
+    finally { setIdentifying(false) }
   }
 
   async function handleSave() {
@@ -301,6 +328,11 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
                 )}
                 <input ref={photoInputRef} type="file" accept="image/*" capture="environment" className="hidden"
                   onChange={e => e.target.files?.[0] && handlePhotoFile(e.target.files[0])} />
+                {identifying && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" /> Identificando planta con IA...
+                  </div>
+                )}
               </div>
 
               <div>
