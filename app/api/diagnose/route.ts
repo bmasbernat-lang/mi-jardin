@@ -25,7 +25,7 @@ Analiza esta imagen y responde SOLO con un JSON con este formato exacto:
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" })
 
     const result = await model.generateContent([
       prompt,
