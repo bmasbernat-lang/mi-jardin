@@ -33,6 +33,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   const [error, setError]     = useState("")
   const [careModal, setCareModal] = useState<Plant | null>(null)
   const photoInputRef         = useRef<HTMLInputElement>(null)
+  const nameInputRef          = useRef<HTMLInputElement>(null)
   const [photoFile, setPhotoFile]       = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
@@ -50,6 +51,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   function openAdd(initial?: Partial<typeof emptyForm>) {
     setForm({ ...emptyForm, ...initial }); setEditing(null)
     setPhotoFile(null); setPhotoPreview(null)
+    setError("")
     setModal("add")
   }
 
@@ -59,6 +61,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
       last_watered: p.last_watered })
     setEditing(p)
     setPhotoFile(null); setPhotoPreview(p.image_url || null)
+    setError("")
     setModal("edit")
   }
 
@@ -70,7 +73,12 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   }
 
   async function handleSave() {
-    if (!form.name.trim()) return
+    setError("")
+    if (!form.name.trim()) {
+      setError("Escribe un nombre para la planta antes de guardar")
+      nameInputRef.current?.focus()
+      return
+    }
     setSaving(true)
     try {
       if (modal === "add") {
@@ -270,6 +278,9 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
               <h2 className="text-lg font-semibold">{modal === "add" ? "Nueva planta" : "Editar planta"}</h2>
               <button onClick={() => setModal(null)} className="rounded-full p-1.5 hover:bg-muted"><X className="size-5" /></button>
             </div>
+            {error && (
+              <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+            )}
             <div className="flex flex-col gap-3">
               {/* Foto */}
               <div>
@@ -294,7 +305,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
 
               <div>
                 <label className="mb-1 block text-sm font-medium">Nombre *</label>
-                <input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} placeholder="Ej: Mi monstera"
+                <input ref={nameInputRef} value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} placeholder="Ej: Mi monstera"
                   className="w-full rounded-2xl border border-border bg-card px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
               </div>
               <div>
@@ -324,7 +335,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
                   className="w-full resize-none rounded-2xl border border-border bg-card px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
               </div>
             </div>
-            <button onClick={handleSave} disabled={saving || !form.name.trim()}
+            <button onClick={handleSave} disabled={saving}
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow transition active:scale-95 disabled:opacity-50">
               {saving ? "Guardando..." : <><Check className="size-4" /> Guardar</>}
             </button>
