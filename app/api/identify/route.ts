@@ -14,11 +14,13 @@ export async function POST(req: NextRequest) {
   const base64   = image.split(",")[1]
   const mimeType = image.startsWith("data:image/png") ? "image/png" : "image/jpeg"
 
-  const prompt = `Eres un experto en botánica. Identifica la especie de la planta en esta imagen.
+  const prompt = `Eres un experto en botánica. Identifica la planta de esta imagen.
+Da SIEMPRE tu mejor estimación aunque no estés totalmente seguro; no respondas null por falta de seguridad.
 Responde SOLO con un JSON con este formato exacto, sin texto adicional:
 {
-  "nombre_comun": "nombre común habitual en español, o null si no se puede identificar",
-  "especie_cientifica": "nombre científico (género y especie), o null si no se puede identificar"
+  "nombre_comun": "nombre común más habitual en español (rellena siempre este campo con tu mejor estimación; usa null SOLO si en la imagen no aparece ninguna planta)",
+  "especie_cientifica": "nombre científico (género y especie); usa null solo si no puedes aventurar ninguno",
+  "confianza": "alta, media o baja"
 }`
 
   try {

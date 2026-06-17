@@ -35,11 +35,13 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   const [careModal, setCareModal] = useState<Plant | null>(null)
   const [aiCareInfo, setAiCareInfo] = useState<{ dificultad: string; riego: string; luz: string; consejo: string } | null>(null)
   const [loadingCare, setLoadingCare] = useState(false)
+  const [careError, setCareError] = useState(false)
   const photoInputRef         = useRef<HTMLInputElement>(null)
   const nameInputRef          = useRef<HTMLInputElement>(null)
   const [photoFile, setPhotoFile]       = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [identifying, setIdentifying]   = useState(false)
+  const [identifyMsg, setIdentifyMsg]   = useState<string | null>(null)
   const [galleryModal, setGalleryModal] = useState<Plant | null>(null)
   const [galleryPhotos, setGalleryPhotos] = useState<{ url: string; created_at: string }[]>([])
   const [loadingGallery, setLoadingGallery] = useState(false)
@@ -85,6 +87,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   function openAdd(initial?: Partial<typeof emptyForm>) {
     setForm({ ...emptyForm, ...initial }); setEditing(null)
     setPhotoFile(null); setPhotoPreview(null)
+    setIdentifyMsg(null)
     setError("")
     setModal("add")
   }
@@ -95,6 +98,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
       last_watered: p.last_watered })
     setEditing(p)
     setPhotoFile(null); setPhotoPreview(p.image_url || null)
+    setIdentifyMsg(null)
     setError("")
     setModal("edit")
   }
@@ -113,22 +117,35 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   // Identifica la especie con IA a partir de la foto y rellena nombre/especie si están vacíos.
   async function identifyPlant(image: string) {
     setIdentifying(true)
+    setIdentifyMsg(null)
     try {
       const res = await fetch("/api/identify", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image }),
       })
       const data = await res.json()
+      if (data?.error) throw new Error(data.error)
       const nombre  = data?.nombre_comun || null
       const especie = data?.especie_cientifica || null
       if (nombre || especie) {
         setForm(f => ({
           ...f,
-          name: f.name.trim() ? f.name : (nombre ?? f.name),
-          species: f.species.trim() ? f.species : (especie ?? nombre ?? f.species),
+          // El nombre de la planta usa siempre el nombre común; si no hay, cae al científico.
+          name: f.name.trim() ? f.name : (nombre ?? especie ?? f.name),
+          species: f.species.trim() ? f.species : (especie ?? f.species),
         }))
+        setIdentifyMsg(
+          data?.confianza === "baja"
+            ? `Identificación aproximada: ${nombre ?? especie}. Revísala y corrígela si hace falta.`
+            : `Identificada: ${nombre ?? especie}`
+        )
+      } else {
+        setIdentifyMsg("No he podido reconocer la planta. Escribe el nombre a mano.")
       }
-    } catch { /* identificación best-effort: si falla, el usuario rellena a mano */ }
+    } catch {
+      // identificación best-effort: si falla, avisamos para que el usuario rellene a mano
+      setIdentifyMsg("No se pudo identificar la planta (error de conexión o de IA). Escribe el nombre a mano.")
+    }
     finally { setIdentifying(false) }
   }
 
@@ -202,11 +219,11 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
     finally { setLoadingGallery(false) }
   }
 
-  async function openCare(plant: Plant) {
-    setCareModal(plant)
-    setAiCareInfo(null)
-    if (findSpecies(plant.species)) return
+  // Pide la ficha de cuidados a la IA. Reutilizable para poder reintentar si falla.
+  async function loadAiCareInfo(plant: Plant) {
     setLoadingCare(true)
+    setCareError(false)
+    setAiCareInfo(null)
     try {
       const res = await fetch("/api/care-info", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -214,8 +231,19 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
       })
       const data = await res.json()
       if (data?.dificultad || data?.riego || data?.luz) setAiCareInfo(data)
-    } catch { /* si falla, se muestra el mensaje de "sin ficha" */ }
+      else setCareError(true)
+    } catch {
+      setCareError(true)
+    }
     finally { setLoadingCare(false) }
+  }
+
+  function openCare(plant: Plant) {
+    setCareModal(plant)
+    setAiCareInfo(null)
+    setCareError(false)
+    if (findSpecies(plant.species)) return  // especie del catálogo: ficha instantánea
+    loadAiCareInfo(plant)
   }
 
   function formatWatered(iso: string) {
@@ -445,6 +473,9 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
                     <Loader2 className="size-3.5 animate-spin" /> Identificando planta con IA...
                   </div>
                 )}
+                {!identifying && identifyMsg && (
+                  <p className="mt-2 text-xs text-muted-foreground">{identifyMsg}</p>
+                )}
               </div>
 
               <div>
@@ -535,6 +566,14 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
                   <p className="rounded-2xl bg-accent px-4 py-3 text-sm text-foreground">{aiCareInfo.consejo}</p>
                 )}
                 <p className="text-center text-[11px] text-muted-foreground">Generado con IA</p>
+              </div>
+            ) : careError ? (
+              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                No se pudo cargar la ficha de cuidados.
+                <button onClick={() => careModal && loadAiCareInfo(careModal)}
+                  className="rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground active:scale-95">
+                  Reintentar
+                </button>
               </div>
             ) : (
               <p className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
