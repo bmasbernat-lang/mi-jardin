@@ -27,6 +27,7 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   const [tasks, setTasks]     = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery]     = useState("")
+  const [statFilter, setStatFilter] = useState<"Saludable" | "Atención" | "Enferma" | "hoy" | null>(null)
   const [modal, setModal]     = useState<"add" | "edit" | null>(null)
   const [editing, setEditing] = useState<Plant | null>(null)
   const [form, setForm]       = useState(emptyForm)
@@ -264,6 +265,12 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
   const pendingWatering = tasks.filter(t => t.type === "Riego" && !t.completed && t.scheduled_date <= todayStr)
   const careInfo   = careModal ? findSpecies(careModal.species) : undefined
 
+  // Plantas con alguna tarea pendiente para hoy (para el filtro "Hoy").
+  const plantIdsHoy = new Set(tasks.filter(t => !t.completed && t.scheduled_date === todayStr).map(t => t.plant_id))
+  const visiblePlants = statFilter === null ? plants
+    : statFilter === "hoy" ? plants.filter(p => plantIdsHoy.has(p.id))
+    : plants.filter(p => p.health === statFilter)
+
   return (
     <div className="flex flex-col gap-6 px-5 pb-24 pt-8">
       <header className="flex items-center justify-between">
@@ -334,26 +341,30 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
 
       {!loading && !query && plants.length > 0 && (
         <section className="grid grid-cols-4 gap-2">
-          <div className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-card py-3">
+          <button onClick={() => setStatFilter(f => f === "Saludable" ? null : "Saludable")}
+            className={`flex flex-col items-center gap-1 rounded-2xl border py-3 transition active:scale-95 ${statFilter === "Saludable" ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/20" : "border-border bg-card"}`}>
             <CheckCircle2 className="size-4 text-emerald-600" />
             <span className="text-sm font-semibold">{sanas}</span>
             <span className="text-[10px] text-muted-foreground">Sanas</span>
-          </div>
-          <div className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-card py-3">
+          </button>
+          <button onClick={() => setStatFilter(f => f === "Atención" ? null : "Atención")}
+            className={`flex flex-col items-center gap-1 rounded-2xl border py-3 transition active:scale-95 ${statFilter === "Atención" ? "border-amber-500 bg-amber-50 ring-2 ring-amber-500/20" : "border-border bg-card"}`}>
             <AlertTriangle className="size-4 text-amber-600" />
             <span className="text-sm font-semibold">{atencion}</span>
             <span className="text-[10px] text-muted-foreground">Atención</span>
-          </div>
-          <div className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-card py-3">
+          </button>
+          <button onClick={() => setStatFilter(f => f === "Enferma" ? null : "Enferma")}
+            className={`flex flex-col items-center gap-1 rounded-2xl border py-3 transition active:scale-95 ${statFilter === "Enferma" ? "border-red-500 bg-red-50 ring-2 ring-red-500/20" : "border-border bg-card"}`}>
             <XCircle className="size-4 text-red-600" />
             <span className="text-sm font-semibold">{enfermas}</span>
             <span className="text-[10px] text-muted-foreground">Enfermas</span>
-          </div>
-          <div className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-card py-3">
+          </button>
+          <button onClick={() => setStatFilter(f => f === "hoy" ? null : "hoy")}
+            className={`flex flex-col items-center gap-1 rounded-2xl border py-3 transition active:scale-95 ${statFilter === "hoy" ? "border-primary bg-primary/10 ring-2 ring-primary/20" : "border-border bg-card"}`}>
             <CalendarClock className="size-4 text-primary" />
             <span className="text-sm font-semibold">{tareasHoy}</span>
             <span className="text-[10px] text-muted-foreground">Hoy</span>
-          </div>
+          </button>
         </section>
       )}
 
@@ -385,7 +396,12 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Mis Plantas</h2>
-            <span className="text-sm text-muted-foreground">{loading ? "Cargando..." : `${plants.length} plantas`}</span>
+            <div className="flex items-center gap-2">
+              {statFilter && (
+                <button onClick={() => setStatFilter(null)} className="text-xs font-medium text-primary underline">Ver todas</button>
+              )}
+              <span className="text-sm text-muted-foreground">{loading ? "Cargando..." : `${visiblePlants.length} planta${visiblePlants.length !== 1 ? "s" : ""}`}</span>
+            </div>
           </div>
           {loading ? Array.from({length:3}).map((_,i) => <div key={i} className="h-28 animate-pulse rounded-3xl bg-muted" />) :
            plants.length === 0 ? (
@@ -394,7 +410,13 @@ export function HomeScreen({ user, onSignOut }: { user: User | null; onSignOut: 
               <p className="text-sm text-muted-foreground">No tienes plantas aún.</p>
               <button onClick={() => openAdd()} className="mt-3 text-sm font-medium text-primary underline">Añadir la primera</button>
             </div>
-          ) : plants.map(plant => (
+          ) : visiblePlants.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-border p-8 text-center">
+              <Leaf className="mx-auto mb-3 size-8 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Ninguna planta en esta categoría.</p>
+              <button onClick={() => setStatFilter(null)} className="mt-3 text-sm font-medium text-primary underline">Ver todas</button>
+            </div>
+          ) : visiblePlants.map(plant => (
             <article key={plant.id} className="flex items-center gap-4 rounded-3xl border border-border bg-card p-3 shadow-sm">
               <button onClick={() => openGallery(plant)}
                 className="relative size-20 shrink-0 overflow-hidden rounded-2xl bg-accent active:scale-95">
