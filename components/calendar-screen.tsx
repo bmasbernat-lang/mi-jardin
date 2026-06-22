@@ -18,6 +18,7 @@ export function CalendarScreen() {
   const [loading, setLoading] = useState(true)
   const [modal, setModal]     = useState(false)
   const [saving, setSaving]   = useState(false)
+  const [error, setError]     = useState("")
   const [form, setForm]       = useState({
     plant_id: "", plant_name: "", type: "Riego" as Task["type"],
     scheduled_date: new Date().toISOString().split("T")[0], time: "09:00",
@@ -34,6 +35,7 @@ export function CalendarScreen() {
   }
 
   async function handleToggle(id: string, completed: boolean) {
+    setError("")
     try {
       await toggleTask(id, !completed)
       setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !completed } : t))
@@ -45,22 +47,29 @@ export function CalendarScreen() {
           if (nextTask) setTasks(prev => [...prev, nextTask])
         }
       }
-    } catch { /* silent */ }
+    } catch (e: any) {
+      setError(`No se pudo actualizar la tarea: ${e?.message || JSON.stringify(e)}`)
+    }
   }
 
   async function handleDelete(id: string) {
+    setError("")
     try { await deleteTask(id); setTasks(prev => prev.filter(t => t.id !== id)) }
-    catch { /* silent */ }
+    catch (e: any) { setError(`No se pudo borrar la tarea: ${e?.message || JSON.stringify(e)}`) }
   }
 
   async function handleSave() {
     if (!form.plant_name || !form.scheduled_date) return
     setSaving(true)
+    setError("")
     try {
-      const t = await addTask({ ...form, completed: false })
+      // plant_id vacío (planta escrita a mano, sin seleccionar) -> null para no romper la columna uuid
+      const t = await addTask({ ...form, plant_id: form.plant_id || null, completed: false } as any)
       setTasks(prev => [...prev, t].sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date)))
       setModal(false)
-    } catch { /* silent */ }
+    } catch (e: any) {
+      setError(`No se pudo guardar la tarea: ${e?.message || e?.error_description || JSON.stringify(e)}`)
+    }
     finally { setSaving(false) }
   }
 
@@ -88,11 +97,17 @@ export function CalendarScreen() {
           <p className="text-sm text-muted-foreground">Tareas programadas</p>
           <h1 className="text-2xl font-semibold">Calendario</h1>
         </div>
-        <button onClick={() => setModal(true)}
+        <button onClick={() => { setError(""); setModal(true) }}
           className="flex items-center gap-1.5 rounded-2xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow transition active:scale-95">
           <Plus className="size-4" /> Tarea
         </button>
       </header>
+
+      {error && !modal && (
+        <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error} <button onClick={() => setError("")} className="ml-2 underline">Cerrar</button>
+        </div>
+      )}
 
       {loading ? (
         Array.from({length:4}).map((_,i) => <div key={i} className="h-20 animate-pulse rounded-2xl bg-muted" />)
@@ -100,7 +115,7 @@ export function CalendarScreen() {
         <div className="rounded-3xl border border-dashed border-border p-8 text-center">
           <Calendar className="mx-auto mb-3 size-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">No hay tareas programadas.</p>
-          <button onClick={() => setModal(true)} className="mt-3 text-sm font-medium text-primary underline">Añadir primera tarea</button>
+          <button onClick={() => { setError(""); setModal(true) }} className="mt-3 text-sm font-medium text-primary underline">Añadir primera tarea</button>
         </div>
       ) : (
         Object.entries(grouped).sort(([a],[b]) => a.localeCompare(b)).map(([date, dayTasks]) => (
@@ -140,6 +155,9 @@ export function CalendarScreen() {
               <h2 className="text-lg font-semibold">Nueva tarea</h2>
               <button onClick={() => setModal(false)} className="rounded-full p-1.5 hover:bg-muted"><X className="size-5" /></button>
             </div>
+            {error && (
+              <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+            )}
             <div className="flex flex-col gap-3">
               <div>
                 <label className="mb-1 block text-sm font-medium">Planta *</label>
